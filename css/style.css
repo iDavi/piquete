@@ -189,6 +189,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .meter-fill { height: 100%; transition: width .35s ease; }
 .fill-mob { background: var(--ocre); }
 .fill-pre { background: var(--vermelho); }
+.fill-opi { background: #7e9bb5; }
 .fill-foco { background: var(--tinta); }
 
 .greve-flag {
@@ -240,6 +241,13 @@ button { font: inherit; color: inherit; cursor: pointer; }
   padding: .1em .45em;
   margin-left: .3em;
 }
+.tab-live::after {
+  content: '●';
+  color: var(--vermelho);
+  margin-left: .35em;
+  animation: pulsa 1.6s ease-in-out infinite;
+}
+@keyframes pulsa { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
 
 /* ============ ÁREA PRINCIPAL ============ */
 .game-main { flex: 1; min-height: 0; position: relative; }
@@ -325,6 +333,50 @@ button { font: inherit; color: inherit; cursor: pointer; }
   pointer-events: none;
 }
 .fn-stamp-x { color: var(--tinta-fraca); border-color: var(--tinta-fraca); }
+
+/* --- mesa de negociação --- */
+#tab-mesa { overflow-y: auto; padding: 1rem; }
+.mesa-clima {
+  border: 2px solid var(--tinta);
+  background: var(--papel);
+  padding: .8rem .9rem;
+  margin-bottom: 1.1rem;
+}
+.mesa-clima-rotulo { display: flex; align-items: center; gap: .6rem; margin-bottom: .45rem; }
+.mesa-clima .res-label { color: var(--tinta-fraca); }
+.clima-tag {
+  font-family: var(--display);
+  font-size: .8rem;
+  letter-spacing: .08em;
+  color: var(--vermelho);
+  border: 2px solid var(--vermelho);
+  border-radius: 4px;
+  padding: .05em .5em;
+  transform: rotate(-1.5deg);
+}
+.meter-clima { height: 12px; border-color: var(--tinta); background: rgba(34,29,23,.08); }
+.fill-clima { background: repeating-linear-gradient(-45deg, var(--vermelho) 0 8px, var(--vermelho-escuro) 8px 16px); }
+.clima-desc { font-size: .85rem; font-style: italic; margin: .55rem 0 .2rem; }
+.clima-formula { font-family: var(--mono); font-size: .6rem; color: var(--tinta-fraca); margin: 0; }
+
+.mesa-lista { list-style: none; margin: 0 0 1rem; padding: 0; }
+.mesa-item { padding: .8rem 0; border-bottom: 1.5px dashed rgba(34,29,23,.3); }
+.mesa-item-head { display: flex; align-items: center; justify-content: space-between; gap: .6rem; margin-bottom: .3rem; }
+.nivel {
+  font-family: var(--mono); font-size: .58rem; font-weight: 700;
+  letter-spacing: .12em; padding: .15em .5em; white-space: nowrap;
+}
+.nivel-int { background: var(--tinta); color: var(--ocre); }
+.nivel-reb { background: var(--ocre); color: var(--tinta); }
+.nivel-aberto { border: 1.5px dashed var(--tinta-fraca); color: var(--tinta-fraca); }
+.tend { font-size: .82rem; line-height: 1.45; color: var(--tinta-fraca); display: block; }
+.tend.boa { color: var(--vermelho-escuro); }
+.tend.ok { color: var(--verde-sutil); font-weight: 600; }
+
+.mesa-acoes { display: flex; gap: .6rem; flex-wrap: wrap; }
+.mesa-nota { font-family: var(--mono); font-size: .62rem; color: var(--tinta-fraca); margin: .8rem 0 0; }
+.mesa-aviso { font-size: .9rem; line-height: 1.5; }
+.btn-pacote { border-color: var(--vermelho); background: #f3ddc8; }
 
 /* --- pauta / diário --- */
 #tab-pauta, #tab-diario { overflow-y: auto; padding: 1rem; }

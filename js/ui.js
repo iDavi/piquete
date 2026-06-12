@@ -20,11 +20,14 @@ function renderHud() {
   $('#hud-day').textContent = Math.min(S.dia, TOTAL_DIAS);
   $('#hud-mob').textContent = Math.round(S.mob);
   $('#hud-pre').textContent = Math.round(S.pre);
+  $('#hud-opi').textContent = Math.round(S.opi);
   $('#hud-cash').textContent = 'R$ ' + S.cash;
   $('#bar-mob').style.width = clamp(S.mob, 0, 100) + '%';
   $('#bar-pre').style.width = clamp(S.pre, 0, 100) + '%';
+  $('#bar-opi').style.width = clamp(S.opi, 0, 100) + '%';
   $('#hud-greve').hidden = !S.greve;
-  $('#badge-pauta').textContent = S.conquistas.length + '/4';
+  $('#badge-pauta').textContent = pontosPauta() + '/4';
+  $('#tab-btn-mesa').classList.toggle('tab-live', mesaAberta());
   document.body.classList.toggle('em-greve', S.greve);
 
   // barra de ação
@@ -54,7 +57,7 @@ function renderArvore() {
   for (const f of FOCOS) {
     const est = estadoFoco(f);
     const el = document.createElement('button');
-    el.className = `focus-node st-${est}` + (f.marco ? ' marco' : '') + (f.conquistaNode ? ' conq' : '');
+    el.className = `focus-node st-${est}` + (f.marco ? ' marco' : '');
     el.dataset.id = f.id;
     el.style.left = (PAD + f.x * COLW) + 'px';
     el.style.top  = (PAD + f.y * ROWH) + 'px';
@@ -110,20 +113,215 @@ function desenharLinhas() {
   }
 }
 
+/* ================= MESA DE NEGOCIAÇÃO ================= */
+function rotuloNivel(id) {
+  const st = S.pautaStatus[id];
+  if (st >= 1) return '<span class="nivel nivel-int">INTEGRAL</span>';
+  if (st >= 0.5) return '<span class="nivel nivel-reb">REBAIXADO</span>';
+  return '<span class="nivel nivel-aberto">EM ABERTO</span>';
+}
+
+function renderMesa() {
+  const el = $('#mesa-conteudo');
+  if (!mesaInstalada()) {
+    el.innerHTML = `<div class="paper-sheet mesa-fechada">
+      <h2 class="sheet-title">Mesa de Negociação</h2>
+      <p class="sheet-sub">sala 12 do prédio da reitoria — atualmente vazia</p>
+      <p class="mesa-aviso">A reitoria só senta à mesa com uma greve de pé e a tática
+      <strong>"Instalar a mesa de negociação"</strong> concluída no mural.
+      ${S.greveJa && !S.greve ? 'Com a greve encerrada, essa porta se fechou.' : 'Construa a greve primeiro.'}</p>
+    </div>`;
+    return;
+  }
+
+  const clima = climaMesa();
+  const forca = Math.round(clamp(forcaMesa(), 0, 100));
+  const aberta = mesaAberta();
+
+  const itens = MESA_ITENS.map(item => {
+    const p = pautaDe(item.id);
+    const st = S.pautaStatus[item.id];
+    const oferta = aberta ? ofertaItem(item) : null;
+    let tendencia;
+    if (st >= 1) {
+      tendencia = `<span class="tend ok">✊ ${p.integral}</span>`;
+    } else if (!aberta) {
+      tendencia = st >= 0.5
+        ? `<span class="tend">Ficou pela metade: ${p.rebaixada}</span>`
+        : '<span class="tend">Ficou em aberto — a mesa fechou.</span>';
+    } else if (oferta === 'integral') {
+      tendencia = `<span class="tend boa">Na próxima rodada, a reitoria cederia <strong>na íntegra</strong> (−${custoItem(item, 'integral')} pressão).</span>`;
+    } else if (oferta === 'rebaixada') {
+      tendencia = `<span class="tend media">Na próxima rodada, cederia uma versão <strong>rebaixada</strong> (−${custoItem(item, 'rebaixada')} pressão).</span>`;
+    } else if (st >= 0.5) {
+      tendencia = `<span class="tend">Assinado rebaixado. Pra elevar à íntegra, falta força na mesa (precisa ~${item.dif}).</span>`;
+    } else {
+      tendencia = `<span class="tend ruim">Fora de cogitação por enquanto (força necessária: ~${item.dif - 12}).</span>`;
+    }
+    return `<li class="mesa-item">
+      <div class="mesa-item-head"><strong>${p.nome}</strong>${rotuloNivel(item.id)}</div>
+      ${tendencia}
+    </li>`;
+  }).join('');
+
+  el.innerHTML = `<div class="paper-sheet">
+    <h2 class="sheet-title">Mesa de Negociação</h2>
+    <p class="sheet-sub">ata nº ${S.rodadas + 1} — comando de greve × gabinete da reitoria</p>
+
+    <div class="mesa-clima">
+      <div class="mesa-clima-rotulo">
+        <span class="res-label">Reitoria:</span>
+        <span class="clima-tag">${clima.rotulo}</span>
+      </div>
+      <div class="meter meter-clima"><div class="meter-fill fill-clima" style="width:${forca}%"></div></div>
+      <p class="clima-desc">${clima.desc}</p>
+      <p class="clima-formula">força na mesa = pressão ${S.flags.dossie ? '+ dossiê ' : ''}+ opinião pública − resistência da reitoria (${Math.round(S.resistencia)})</p>
+    </div>
+
+    <ul class="mesa-lista">${itens}</ul>
+
+    ${aberta ? `
+      <div class="mesa-acoes">
+        <button class="btn btn-primary" id="btn-rodada">Convocar rodada (2 dias)</button>
+        <button class="btn btn-ghost" id="btn-acordo" ${podeAcordoFinal() ? '' : 'disabled'}
+          title="${podeAcordoFinal() ? 'Encerra a greve consolidando o que já foi assinado' : 'Assine ao menos uma conquista antes'}">
+          Assinar acordo final
+        </button>
+      </div>
+      <p class="mesa-nota">Cada conquista assinada faz a reitoria endurecer (+resistência).
+      O acordo final encerra a greve por cima — mas fecha a mesa pra sempre.</p>
+    ` : '<p class="mesa-aviso">A mesa está encerrada. O que foi assinado, está assinado.</p>'}
+  </div>`;
+
+  const br = $('#btn-rodada');
+  if (br) br.addEventListener('click', executarRodada);
+  const ba = $('#btn-acordo');
+  if (ba) ba.addEventListener('click', confirmarAcordoFinal);
+}
+
+function executarRodada() {
+  if (!backdrop.hidden) return;
+  const r = convocarRodada();
+  if (!r) return;
+  renderTudo();
+  if (r.fim) { mostrarFim(r.fim); return; }
+
+  if (!r.ofertas.length) {
+    abrirModal(`
+      <div class="modal-tape" aria-hidden="true"></div>
+      <span class="modal-kicker">RODADA Nº ${S.rodadas}</span>
+      <h3 class="modal-title">A reitoria não cede nada</h3>
+      <p class="modal-text">Duas horas de leitura de pareceres e um "infelizmente não há disponibilidade orçamentária". Tradução: a pressão ainda não chegou lá. Volte com mais força — pressão alta, opinião pública a favor e resistência baixa.</p>
+      <button class="btn btn-primary" id="m-ok">Voltar pra luta</button>
+    `);
+    $('#m-ok').addEventListener('click', () => { fecharModal(); checarFimOuRender(); });
+    return;
+  }
+
+  const ofertasHtml = r.ofertas.map(o => {
+    const p = pautaDe(o.id);
+    const semPre = S.pre < o.custo;
+    const elevando = o.nivel === 'integral' && S.pautaStatus[o.id] >= 0.5;
+    return `<button class="btn btn-op" data-id="${o.id}" data-nivel="${o.nivel}" ${semPre ? 'disabled' : ''}>
+      <span>${elevando ? 'Elevar à íntegra' : 'Assinar'}: ${p.nome} ${o.nivel === 'integral' ? '(INTEGRAL)' : '(rebaixado)'}</span>
+      <small>${o.nivel === 'integral' ? p.integral : p.rebaixada}</small>
+      <small>custa ${o.custo} de pressão${semPre ? ' — pressão insuficiente' : ''} · a reitoria endurece depois</small>
+    </button>`;
+  }).join('');
+
+  const pacoteHtml = r.pacote ? `
+    <button class="btn btn-op btn-pacote" id="m-pacote">
+      <span>⚠ Aceitar o pacote da reitoria</span>
+      <small>Tudo que está na mesa sai assinado REBAIXADO, sem custo de pressão — mas a greve termina hoje.</small>
+    </button>` : '';
+
+  abrirModal(`
+    <div class="modal-tape" aria-hidden="true"></div>
+    <span class="modal-kicker">RODADA Nº ${S.rodadas} — A REITORIA APRESENTA</span>
+    <h3 class="modal-title">O que está sobre a mesa</h3>
+    <p class="modal-text">O chefe de gabinete desliza uma pasta pela mesa. Você pode assinar <strong>um</strong> item por rodada — ou levantar e voltar com mais força.</p>
+    <div class="evento-ops">
+      ${ofertasHtml}
+      ${pacoteHtml}
+      <button class="btn btn-op" id="m-levantar">
+        <span>Levantar da mesa sem assinar</span>
+        <small>+2 mobilização — a firmeza anima a base, e a oferta não foge</small>
+      </button>
+    </div>
+  `, true);
+
+  modalCard.querySelectorAll('.btn-op[data-id]').forEach(b => {
+    b.addEventListener('click', () => {
+      assinarItem(b.dataset.id, b.dataset.nivel);
+      modalTravado = false; fecharModal();
+      const p = pautaDe(b.dataset.id);
+      abrirModal(`
+        <div class="modal-tape" aria-hidden="true"></div>
+        <span class="modal-kicker">ASSINADO EM ATA</span>
+        <h3 class="modal-title">${p.nome}</h3>
+        <p class="modal-text">${b.dataset.nivel === 'integral' ? p.integral : p.rebaixada}</p>
+        <p class="modal-fx">${b.dataset.nivel === 'integral' ? 'conquista integral (1 ponto)' : 'conquista rebaixada (meio ponto)'} · a reitoria endurece (+10 resistência)</p>
+        <button class="btn btn-primary" id="m-ok">A luta continua</button>
+      `);
+      $('#m-ok').addEventListener('click', () => { fecharModal(); checarFimOuRender(); });
+    });
+  });
+  const bp = $('#m-pacote');
+  if (bp) bp.addEventListener('click', () => {
+    modalTravado = false; fecharModal();
+    const fechados = aceitarPacote();
+    abrirModal(`
+      <div class="modal-tape" aria-hidden="true"></div>
+      <span class="modal-kicker">PACOTE FECHADO</span>
+      <h3 class="modal-title">A greve termina com acordo rebaixado</h3>
+      <p class="modal-text">Assinados pela metade: ${fechados.join(', ')}. A base recebe a notícia dividida — era isso ou mais semanas de desgaste. A história julgará.</p>
+      <button class="btn btn-primary" id="m-ok">Encerrar a greve</button>
+    `);
+    $('#m-ok').addEventListener('click', () => { fecharModal(); checarFimOuRender(); });
+  });
+  $('#m-levantar').addEventListener('click', () => {
+    recusarRodada();
+    modalTravado = false; fecharModal();
+    checarFimOuRender();
+  });
+}
+
+function confirmarAcordoFinal() {
+  if (!podeAcordoFinal() || !backdrop.hidden) return;
+  const p = pontosPauta();
+  abrirModal(`
+    <div class="modal-tape" aria-hidden="true"></div>
+    <span class="modal-kicker">DECISÃO DE ASSEMBLEIA</span>
+    <h3 class="modal-title">Assinar o acordo final?</h3>
+    <p class="modal-text">Encerra a greve por cima, consolidando <strong>${p} ponto${p === 1 ? '' : 's'}</strong> de pauta assinada. O desgaste para e a base sai em marcha — mas a mesa fecha: o que não foi conquistado fica pra próxima gestão.</p>
+    <div class="evento-ops">
+      <button class="btn btn-op" id="m-sim"><span>Assinar e sair em marcha</span><small>+${Math.round(6 + 4 * p)} mobilização, fim da greve</small></button>
+      <button class="btn btn-op" id="m-nao"><span>Ainda não — dá pra arrancar mais</span><small>a greve continua</small></button>
+    </div>
+  `, true);
+  $('#m-sim').addEventListener('click', () => {
+    modalTravado = false; fecharModal();
+    assinarAcordoFinal();
+    checarFimOuRender();
+  });
+  $('#m-nao').addEventListener('click', () => { modalTravado = false; fecharModal(); });
+}
+
 /* ================= PAUTA / DIÁRIO ================= */
 function renderPauta() {
   $('#pauta-list').innerHTML = PAUTA.map(p => {
-    const ok = S.conquistas.includes(p.id);
+    const st = S.pautaStatus[p.id];
+    const ok = st > 0;
     return `<li class="pauta-item ${ok ? 'ok' : ''}">
-      <div class="pauta-check">${ok ? '✊' : '·'}</div>
-      <div><strong>${p.nome}</strong><p>${p.desc}</p>
-      <span class="pauta-status">${ok ? 'CONQUISTADO — assinado em ata' : 'em aberto'}</span></div>
+      <div class="pauta-check">${st >= 1 ? '✊' : st >= 0.5 ? '½' : '·'}</div>
+      <div><strong>${p.nome}</strong><p>${ok ? (st >= 1 ? p.integral : p.rebaixada) : p.desc}</p>
+      <span class="pauta-status">${st >= 1 ? 'CONQUISTADO NA ÍNTEGRA — assinado em ata' : st >= 0.5 ? 'conquistado rebaixado — dá pra elevar na mesa' : 'em aberto'}</span></div>
     </li>`;
   }).join('');
 }
 
 function renderDiario() {
-  $('#diario-list').innerHTML = S.diario.slice(0, 60).map(d =>
+  $('#diario-list').innerHTML = S.diario.slice(0, 80).map(d =>
     `<li class="diario-item tipo-${d.tipo}">
       <span class="diario-dia">DIA ${d.dia}</span>
       <span class="diario-txt">${d.txt}</span>
@@ -132,7 +330,7 @@ function renderDiario() {
 }
 
 function renderTudo() {
-  renderHud(); renderArvore(); renderPauta(); renderDiario();
+  renderHud(); renderArvore(); renderMesa(); renderPauta(); renderDiario();
 }
 
 /* ================= MODAIS ================= */
@@ -157,10 +355,11 @@ function fmtFx(fx) {
   if (fx.mob) parts.push(`${fx.mob > 0 ? '+' : ''}${fx.mob} mobilização`);
   if (fx.pre && fx.pre > -100) parts.push(`${fx.pre > 0 ? '+' : ''}${fx.pre} pressão`);
   if (fx.pre && fx.pre <= -100) parts.push('a pressão acumulada se perde');
+  if (fx.opi) parts.push(`${fx.opi > 0 ? '+' : ''}${fx.opi} opinião pública`);
   if (fx.cash) parts.push(`${fx.cash > 0 ? '+' : ''}R$ ${Math.abs(fx.cash)}${fx.cash > 0 ? '' : ' do caixa'}`);
   if (fx.greve) parts.push('DEFLAGRA A GREVE');
   if (fx.fimGreve) parts.push('encerra a greve');
-  if (fx.conquista) parts.push('CONQUISTA: ' + PAUTA.find(p => p.id === fx.conquista).nome);
+  if (fx.conquistaParcial) parts.push('conquista rebaixada: ' + pautaDe(fx.conquistaParcial).nome);
   return parts.join(' · ');
 }
 
@@ -240,9 +439,11 @@ function abrirAjuda() {
       <p><strong>O objetivo:</strong> em 90 dias, antes da eleição do DCE, deflagrar uma greve estudantil e arrancar da reitoria o máximo da pauta: bandejão, moradia, PAPFE e cotas.</p>
       <p><strong>O mural de táticas:</strong> escolha uma tática por vez; cada uma leva alguns dias. Toque em "Virar o dia" para o tempo passar — ou "Tocar reto" para avançar até algo acontecer.</p>
       <p><strong>Mobilização ✊</strong> é a sua base. Precisa de 55 pra deflagrar a greve — e durante a greve ela se desgasta todo dia. Se zerar, a greve morre.</p>
-      <p><strong>Pressão ▲</strong> é o quanto a reitoria está acuada. Durante a greve ela sobe sozinha, e é a moeda das negociações: cada conquista consome pressão.</p>
+      <p><strong>Pressão ▲</strong> é o quanto a reitoria está acuada. Sobe sozinha durante a greve e é a moeda da mesa: cada conquista assinada consome pressão.</p>
+      <p><strong>Opinião pública ◉</strong> é a cidade olhando pra vocês. Ações radicais (trancaço, ocupação) dão pressão mas queimam a imagem; marcha, imprensa e aula pública constroem simpatia. Na mesa, imagem é força.</p>
+      <p><strong>A Mesa:</strong> instale-a pelo mural e convoque rodadas (2 dias cada). A reitoria oferece cada item <em>na íntegra</em> ou <em>rebaixado</em>, conforme sua força (pressão + opinião − resistência). Cada assinatura endurece a reitoria. Itens rebaixados valem meio ponto — e podem ser elevados depois.</p>
       <p><strong>Caixa R$</strong> paga panfleto, som e capa de chuva. Festival e festa beneficente reabastecem.</p>
-      <p><strong>O final:</strong> no dia 90, a urna decide. Conquistas assinadas valem mais que discurso bonito.</p>
+      <p><strong>O final:</strong> no dia 90, a urna conta os pontos da pauta assinada. Encerre a greve com o acordo final pra sair por cima — greve que esvazia, perde tudo.</p>
     </div>
     <button class="btn btn-primary" id="m-close2">Pra cima deles</button>
   `);
@@ -300,17 +501,23 @@ function mostrarFim(id) {
   $('#end-stamp').textContent = fim.carimbo;
   $('#end-title').textContent = fim.titulo;
   $('#end-text').textContent = fim.texto;
+  const detalhePauta = PAUTA.map(p => {
+    const st = S.pautaStatus[p.id];
+    return `${p.nome}: ${st >= 1 ? 'integral' : st >= 0.5 ? 'rebaixado' : 'não conquistado'}`;
+  }).join(' · ');
   const stats = [
-    `Conquistas assinadas: ${S.conquistas.length} de 4` +
-      (S.conquistas.length ? ' — ' + S.conquistas.map(c => PAUTA.find(p => p.id === c).nome).join(', ') : ''),
-    S.greveJa ? `Dias de greve: ${S.diasGreve}` : 'A greve nunca foi deflagrada',
-    `Mobilização final: ${Math.round(S.mob)} · Pressão final: ${Math.round(S.pre)}`,
+    `Pauta assinada: ${pontosPauta()} de 4 pontos`,
+    detalhePauta,
+    S.greveJa ? `Dias de greve: ${S.diasGreve} · Rodadas de negociação: ${S.rodadas}` : 'A greve nunca foi deflagrada',
+    `Mobilização final: ${Math.round(S.mob)} · Pressão: ${Math.round(S.pre)} · Opinião pública: ${Math.round(S.opi)}`,
     `Caixa do DCE: R$ ${S.cash}`,
     S.flags.migalha ? 'A história registra: a gestão aceitou a proposta-migalha.' : null,
+    S.flags.pacote ? 'A história registra: a gestão fechou o pacote rebaixado da reitoria.' : null,
+    S.flags.acordoFinal ? 'A greve terminou por cima, com acordo final assinado em marcha.' : null,
   ].filter(Boolean);
   $('#end-stats').innerHTML = stats.map(s => `<li>${s}</li>`).join('');
   document.getElementById('end-stamp').className =
-    'stamp stamp-end ' + (fim.carimbo === 'VITÓRIA' ? 'stamp-win' : fim.carimbo === 'UFA' ? 'stamp-win' : 'stamp-lose');
+    'stamp stamp-end ' + (fim.carimbo === 'VITÓRIA' || fim.carimbo === 'UFA' ? 'stamp-win' : 'stamp-lose');
   mostrarTela('end');
 }
 

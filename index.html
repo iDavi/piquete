@@ -64,6 +64,11 @@
         <div class="meter"><div class="meter-fill fill-pre" id="bar-pre"></div></div>
         <span class="res-val" id="hud-pre">0</span>
       </div>
+      <div class="res" title="Opinião pública: a cidade olhando pra vocês">
+        <span class="res-label">Opinião</span>
+        <div class="meter"><div class="meter-fill fill-opi" id="bar-opi"></div></div>
+        <span class="res-val" id="hud-opi">50</span>
+      </div>
       <div class="res res-cash" title="Caixa do DCE">
         <span class="res-label">Caixa</span>
         <span class="res-val" id="hud-cash">R$ 300</span>
@@ -74,6 +79,7 @@
 
   <nav class="tabs" role="tablist">
     <button class="tab active" data-tab="tree" role="tab">Mural de Táticas</button>
+    <button class="tab" data-tab="mesa" role="tab" id="tab-btn-mesa">Mesa</button>
     <button class="tab" data-tab="pauta" role="tab">Pauta <span class="tab-badge" id="badge-pauta">0/4</span></button>
     <button class="tab" data-tab="diario" role="tab">Diário de Luta</button>
   </nav>
@@ -86,6 +92,10 @@
           <!-- nós inseridos via JS -->
         </div>
       </div>
+    </section>
+
+    <section id="tab-mesa" class="tab-panel">
+      <div id="mesa-conteudo"></div>
     </section>
 
     <section id="tab-pauta" class="tab-panel">
